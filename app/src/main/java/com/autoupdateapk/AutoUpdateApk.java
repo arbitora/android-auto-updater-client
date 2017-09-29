@@ -183,8 +183,9 @@ public class AutoUpdateApk extends Observable {
 	/*
 		Should be called after unregistering the receiver.
 	 */
-	public void registerReceiver(){
-		if (!receiverRegistered){
+	public void registerReceiver(Context newContext){
+		context = newContext;
+		if (!receiverRegistered && connectivity_receiver != null){
 			if (haveInternetPermissions()) {
 				receiverRegistered = true;
 				context.registerReceiver(connectivity_receiver, new IntentFilter(
@@ -196,52 +197,16 @@ public class AutoUpdateApk extends Observable {
 	/*
 		Unregisters receiver. Remember to re-register the receiver with registerReceiver()
 	 */
-	public void unRegisterReceived(){
-		receiverRegistered = false;
-		context.unregisterReceiver(connectivity_receiver);
+	public void unRegisterReceiver(){
+		if (receiverRegistered){
+			receiverRegistered = false;
+			context.unregisterReceiver(connectivity_receiver);
+		}
+
 	}
 
 	private boolean receiverRegistered = false;
-	private BroadcastReceiver connectivity_receiver = new BroadcastReceiver() {
-		@Override
-		public void onReceive(Context context, Intent intent) {
-
-			NetworkInfo currentNetworkInfo;
-
-			// Marshmallow (API 23=<
-			if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M){
-				ConnectivityManager connectivityManager = (ConnectivityManager)
-						context.getSystemService(Context.CONNECTIVITY_SERVICE);
-				if (connectivityManager != null)
-					currentNetworkInfo = connectivityManager.getActiveNetworkInfo();
-				else
-					currentNetworkInfo = null;
-			}
-			else{
-				currentNetworkInfo = intent.getParcelableExtra(ConnectivityManager.EXTRA_NETWORK_INFO);
-			}
-
-			// do application-specific task(s) based on the current network
-			// state, such
-			// as enabling queuing of HTTP requests when currentNetworkInfo is
-			// connected etc.
-			if (currentNetworkInfo != null){
-				boolean not_mobile = !currentNetworkInfo.getTypeName()
-						.equalsIgnoreCase("MOBILE");
-				if (currentNetworkInfo.isConnected()
-						&& (mobile_updates || not_mobile)) {
-					checkUpdates(false);
-					updateHandler.postDelayed(periodicUpdate, updateInterval);
-				} else {
-					updateHandler.removeCallbacks(periodicUpdate); // no network
-					// anyway
-				}
-			}
-			updateHandler.removeCallbacks(periodicUpdate); // no network
-			// anyway
-
-		}
-	};
+	private BroadcastReceiver connectivity_receiver;
 
 	public static final String AUTOUPDATE_CHECKING = "autoupdate_checking";
 	public static final String AUTOUPDATE_NO_UPDATE = "autoupdate_no_update";
@@ -280,6 +245,7 @@ public class AutoUpdateApk extends Observable {
 	private static String packageName;
 	private static String appName;
 	private static int device_id;
+	private static int versionCode;
 
 	public static final long SECONDS = 1000;
 	public static final long MINUTES = 60 * SECONDS;
@@ -335,6 +301,47 @@ public class AutoUpdateApk extends Observable {
 	private void setupVariables(Context ctx) {
 		context = ctx;
 
+		connectivity_receiver = new BroadcastReceiver() {
+			@Override
+			public void onReceive(Context context, Intent intent) {
+
+				NetworkInfo currentNetworkInfo;
+
+				// Marshmallow (API 23=<
+				if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M){
+					ConnectivityManager connectivityManager = (ConnectivityManager)
+							context.getSystemService(Context.CONNECTIVITY_SERVICE);
+					if (connectivityManager != null)
+						currentNetworkInfo = connectivityManager.getActiveNetworkInfo();
+					else
+						currentNetworkInfo = null;
+				}
+				else{
+					currentNetworkInfo = intent.getParcelableExtra(ConnectivityManager.EXTRA_NETWORK_INFO);
+				}
+
+				// do application-specific task(s) based on the current network
+				// state, such
+				// as enabling queuing of HTTP requests when currentNetworkInfo is
+				// connected etc.
+				if (currentNetworkInfo != null){
+					boolean not_mobile = !currentNetworkInfo.getTypeName()
+							.equalsIgnoreCase("MOBILE");
+					if (currentNetworkInfo.isConnected()
+							&& (mobile_updates || not_mobile)) {
+						checkUpdates(false);
+						updateHandler.postDelayed(periodicUpdate, updateInterval);
+					} else {
+						updateHandler.removeCallbacks(periodicUpdate); // no network
+						// anyway
+					}
+				}
+				updateHandler.removeCallbacks(periodicUpdate); // no network
+				// anyway
+
+			}
+		};
+
 		packageName = context.getPackageName();
 		preferences = context.getSharedPreferences(packageName + "_" + TAG,
 				Context.MODE_PRIVATE);
@@ -367,6 +374,7 @@ public class AutoUpdateApk extends Observable {
 
 			String update_file = preferences.getString(UPDATE_FILE, "");
 			if (update_file.length() > 0) {
+				// Check update version, delete if lesser version than current.
 				File temporary = new File(downloadFolderPath + "/");
 				if (temporary.delete()) {
 					preferences.edit().remove(UPDATE_FILE)
@@ -419,7 +427,7 @@ public class AutoUpdateApk extends Observable {
 							notifyObservers(AUTOUPDATE_GOT_UPDATE);
 							if (result.length > 2 && result[2] != null){
 								try{
-									preferences.edit().putInt(VERSION_KEY, Integer.parseInt(result[2])).apply();
+									versionCode = Integer.parseInt(result[2]);
 								}catch(NumberFormatException nfe){
 									Log_e(TAG, "Invalid version code", nfe);
 								}
@@ -452,6 +460,12 @@ public class AutoUpdateApk extends Observable {
 							setChanged();
 							notifyObservers(AUTOUPDATE_NO_UPDATE);
 							Log_v(TAG, "No update available");
+						}
+						else if (result[0].equalsIgnoreCase("Bad Request")){
+							// LATEST UPDATE
+							setChanged();
+							notifyObservers(AUTOUPDATE_NO_UPDATE);
+							Log_v(TAG, "No updates for this application.");
 						}
 						else{
 							// INCORRECT RESPONSE
@@ -500,7 +514,6 @@ public class AutoUpdateApk extends Observable {
 					 */
 					postMessage.put("pkgname", packageName);
 					postMessage.put("version", String.valueOf(preferences.getInt(VERSION_KEY, 0)));
-					postMessage.put("md5", preferences.getString(MD5_KEY, "0"));
 					postMessage.put("id", String.format("%08x", device_id));
 					postMessage.put("forced", String.valueOf(forced));
 
@@ -556,6 +569,8 @@ public class AutoUpdateApk extends Observable {
 							fileName).apply();
 					preferences.edit()
 							.putString(MD5_KEY, MD5Hex(parsedUri))
+							.apply();
+					preferences.edit().putInt(VERSION_KEY, versionCode)
 							.apply();
 
 					raise_notification();
@@ -651,8 +666,13 @@ public class AutoUpdateApk extends Observable {
 		byte[] buf = new byte[BUFFER_SIZE];
 		int length;
 		try {
+			if (filename.substring(0,7).matches("file://")){
+				filename = filename.substring(7);
+			}
 
-			FileInputStream fis = new FileInputStream(filename);
+			File temp = new File(filename);
+
+			FileInputStream fis = new FileInputStream(temp);
 			BufferedInputStream bis = new BufferedInputStream(fis);
 			MessageDigest md = java.security.MessageDigest.getInstance("MD5");
 			while ((length = bis.read(buf)) != -1) {
