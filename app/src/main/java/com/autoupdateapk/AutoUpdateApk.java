@@ -38,7 +38,6 @@ import android.support.v4.BuildConfig;
 import android.support.v4.app.NotificationCompat;
 import android.support.v4.app.NotificationCompatSideChannelService;
 import android.support.v4.content.FileProvider;
-import android.text.format.DateFormat;
 
 import com.android.volley.AuthFailureError;
 import com.android.volley.DefaultRetryPolicy;
@@ -53,7 +52,6 @@ import com.android.volley.toolbox.Volley;
 import java.io.BufferedInputStream;
 import java.io.File;
 import java.io.FileInputStream;
-import java.io.IOException;
 import java.security.MessageDigest;
 import java.text.SimpleDateFormat;
 import java.util.ArrayList;
