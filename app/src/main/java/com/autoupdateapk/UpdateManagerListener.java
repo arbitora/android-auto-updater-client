@@ -4,7 +4,7 @@ import android.app.DownloadManager;
 import android.net.Uri;
 
 /**
- * Created by Collapick-Trainee on 21/09/2017.
+ * Created by Tommi Jokinen on 21/09/2017.
  */
 
 public interface UpdateManagerListener {

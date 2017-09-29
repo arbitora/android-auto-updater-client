@@ -12,7 +12,7 @@ import android.os.Environment;
 import static android.content.Context.DOWNLOAD_SERVICE;
 
 /**
- * Created by Collapick-Trainee on 21/09/2017.
+ * Created by Tommi Jokinen on 21/09/2017.
  *
  * This class handles currently the downloading of an APK file from the given uri (URL in this case).
  */
