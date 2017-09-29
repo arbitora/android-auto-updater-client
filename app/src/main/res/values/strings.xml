@@ -1,0 +1,14 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="hello">Hello World Auto Update</string>
+    <string name="app_name">Auto Update .APK Client</string>
+
+    <string name="txt_notif_updateAvailable">update available</string>
+    <string name="txt_notif_clickHereToInstall">Click here to Install</string>
+    <string name="txt_notif_update">update</string>
+
+    <string name="dm_title">@string/app_name</string>
+    <string name="dm_desc">Update downloading</string>
+    <string name="update_download_started">The download of the update has started.</string>
+    <string name="update_download_failed">Download of the update has failed.</string>
+</resources>
