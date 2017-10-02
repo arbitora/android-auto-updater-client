@@ -619,7 +619,7 @@ public class AutoUpdateApk extends Observable {
 				File installationFile = new File(temp);
 
 
-				Uri fileUri = FileProvider.getUriForFile(context, BuildConfig.APPLICATION_ID
+				Uri fileUri = FileProvider.getUriForFile(context, com.autoupdatetest.BuildConfig.APPLICATION_ID
 						+ ".provider", installationFile);
 
 				notificationIntent = notificationIntent.setData(fileUri);
@@ -642,6 +642,7 @@ public class AutoUpdateApk extends Observable {
 
 			//Notification.Builder builder = new Notification.Builder(context);
 			NotificationCompat.Builder builder = new NotificationCompat.Builder(context);
+
 
 			builder.setAutoCancel(false);
 			builder.setTicker(appName + " " + context.getString(R.string.txt_notif_updateAvailable));
