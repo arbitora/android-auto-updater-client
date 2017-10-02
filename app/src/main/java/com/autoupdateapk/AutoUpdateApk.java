@@ -266,6 +266,7 @@ public class AutoUpdateApk extends Observable {
 	private final static String MD5_TIME = "md5_time";
 	private final static String MD5_KEY = "md5";
 	private final static String VERSION_KEY = "vKey";
+	private final static String PATH_KEY = "pathKey";
 
 	private static int NOTIFICATION_ID = 0xDEADBEEF;
 	private static int NOTIFICATION_FLAGS = Notification.FLAG_AUTO_CANCEL
@@ -351,6 +352,10 @@ public class AutoUpdateApk extends Observable {
 		NOTIFICATION_ID += crc32(packageName);
 		// schedule.add(new ScheduleEntry(0,24));
 
+
+		/*
+			Used for Notifications.
+		 */
 		ApplicationInfo appInfo = context.getApplicationInfo();
 		if (appInfo.icon != 0) {
 			appIcon = appInfo.icon;
@@ -363,26 +368,16 @@ public class AutoUpdateApk extends Observable {
 			Log_w(TAG, "unable to find application label");
 		}
 
-		String downloadFolderPath = ctx.getExternalFilesDir(Environment.DIRECTORY_DOWNLOADS)
-				.getAbsolutePath();
-		if (new File (downloadFolderPath).lastModified() > preferences.getLong(MD5_TIME, 0)){
+		if (new File (ctx.getExternalFilesDir(Environment.DIRECTORY_DOWNLOADS)
+				.getAbsolutePath()).lastModified() > preferences.getLong(MD5_TIME, 0)){
 			preferences.edit().putString(MD5_KEY,
-						MD5Hex(appInfo.sourceDir))
-						.apply();
+					MD5Hex(appInfo.sourceDir))
+					.apply();
 			preferences.edit().putLong(MD5_TIME, System.currentTimeMillis())
 					.apply();
-
-			String update_file = preferences.getString(UPDATE_FILE, "");
-			if (update_file.length() > 0) {
-				// Check update version, delete if lesser version than current.
-				File temporary = new File(downloadFolderPath + "/");
-				if (temporary.delete()) {
-					preferences.edit().remove(UPDATE_FILE)
-							.remove(SILENT_FAILED).apply();
-				}
-			}
 		}
-		raise_notification();
+		checkDownloadedFiles();
+
 
 		if (haveInternetPermissions()) {
 			receiverRegistered = true;
@@ -405,7 +400,9 @@ public class AutoUpdateApk extends Observable {
 		return false;
 	}
 
-
+	/*
+		Checks updates using Volley
+	 */
 	private void checkUpdates(boolean was_forced){
 		forced = was_forced;
 
@@ -425,32 +422,30 @@ public class AutoUpdateApk extends Observable {
 							// UPDATE FOUND
 							setChanged();
 							notifyObservers(AUTOUPDATE_GOT_UPDATE);
-							if (result.length > 2 && result[2] != null){
+							if (result.length > 3 && result[1] != null
+									&& result[2] != null
+									&& result[3] != null){
+
 								try{
 									versionCode = Integer.parseInt(result[2]);
+									// Update last update time.
+									last_update = System.currentTimeMillis();
+									preferences.edit().putLong(LAST_UPDATE_KEY, last_update).apply();
+
+									if (result[3].equalsIgnoreCase("true")){
+										// Manual update
+										// TODO Notify download
+										//raise_notification();
+										startDownload(server + result[1]);
+									}
+									else{
+										// Auto update
+										// TODO Notify download
+										//raise_notification();
+										startDownload(server + result[1]);
+									}
 								}catch(NumberFormatException nfe){
 									Log_e(TAG, "Invalid version code", nfe);
-								}
-							}
-
-							if (result.length > 3 && result[3] != null && result.length
-									> 1 && result[1] != null){
-								// Update last update time.
-								preferences.edit()
-										.putLong(MD5_TIME, System.currentTimeMillis())
-										.apply();
-
-								if (result[3].equalsIgnoreCase("true")){
-									// Manual update
-									// TODO Notify download
-									//raise_notification();
-									startDownload(server + result[1]);
-								}
-								else{
-									// Auto update
-									// TODO Notify download
-									//raise_notification();
-									startDownload(server + result[1]);
 								}
 							}
 
@@ -509,9 +504,7 @@ public class AutoUpdateApk extends Observable {
 				@Override
 				protected Map<String, String> getParams() throws AuthFailureError {
 					Map<String, String> postMessage = new HashMap<>();
-					/*
-						Construct POST structure.
-					 */
+					// Construct POST structure.
 					postMessage.put("pkgname", packageName);
 					postMessage.put("version", String.valueOf(preferences.getInt(VERSION_KEY, 0)));
 					postMessage.put("id", String.format("%08x", device_id));
@@ -521,8 +514,7 @@ public class AutoUpdateApk extends Observable {
 				}
 			};
 
-			last_update = System.currentTimeMillis();
-			preferences.edit().putLong(LAST_UPDATE_KEY, last_update).apply();
+
 
 			this.setChanged();
 			this.notifyObservers(AUTOUPDATE_CHECKING);
@@ -534,7 +526,14 @@ public class AutoUpdateApk extends Observable {
 		}
 	}
 
+	/*
+		Starts download of the update via UpdateManager's DownloadManager.
+		Checks first if a previous update's download is currently in download
+		before doing multiple requests.
+	 */
 	private void startDownload(String downloadUrl){
+		checkDownloadedFiles(); // Avoid multiple file download.
+
 		if (updateManager == null){
 			updateManager = new UpdateManager(context, downloadUrl, new UpdateManagerListener(){
 
@@ -558,9 +557,6 @@ public class AutoUpdateApk extends Observable {
 
 				@Override
 				public void updateManagerFinished(Uri uri, String mimeType){
-
-					/*String update_file_path = context.getFilesDir()
-							.getAbsolutePath() + "/" + result[1];*/
 					String parsedUri = uri.toString();
 					// Save preferences of the file
 					String fileName = parsedUri.substring(parsedUri
@@ -569,6 +565,9 @@ public class AutoUpdateApk extends Observable {
 							fileName).apply();
 					preferences.edit()
 							.putString(MD5_KEY, MD5Hex(parsedUri))
+							.apply();
+					preferences.edit()
+							.putLong(MD5_TIME, System.currentTimeMillis())
 							.apply();
 					preferences.edit().putInt(VERSION_KEY, versionCode)
 							.apply();
@@ -661,6 +660,7 @@ public class AutoUpdateApk extends Observable {
 
 	}
 
+	// MD5 checksum from a given string to file.
 	private String MD5Hex(String filename) {
 		final int BUFFER_SIZE = 8192;
 		byte[] buf = new byte[BUFFER_SIZE];
@@ -695,6 +695,9 @@ public class AutoUpdateApk extends Observable {
 		return "md5bad";
 	}
 
+	/*
+		Checks if application has necessary permissions.
+	 */
 	private boolean haveInternetPermissions() {
 		Set<String> required_perms = new HashSet<String>();
 		required_perms.add("android.permission.INTERNET");
@@ -706,17 +709,13 @@ public class AutoUpdateApk extends Observable {
 		String packageName = context.getPackageName();
 		int flags = PackageManager.GET_PERMISSIONS;
 		PackageInfo packageInfo = null;
-
-		int versionCode = 0;
 		try {
 			packageInfo = pm.getPackageInfo(packageName, flags);
-			versionCode = packageInfo.versionCode;
 		} catch (PackageManager.NameNotFoundException e) {
 			Log_e(TAG, e.getMessage());
 		}
 
-		if (preferences != null)
-			preferences.edit().putInt(VERSION_KEY, versionCode).apply();
+
 
 		if (packageInfo != null) {
 			for (String p : packageInfo.requestedPermissions) {
@@ -732,7 +731,97 @@ public class AutoUpdateApk extends Observable {
 			}
 		}
 		Log_e(TAG,
-				"INTERNET/WIFI access required, but no permissions are found in Manifest.xml");
+				"INTERNET/WIFI access required and WRITE_EXTERNAL_STORAGE, but no permissions are found in Manifest.xml");
+		return false;
+	}
+
+	/*
+		Gets the version code of the application.
+		Returns 0 upon fail.
+	 */
+	private int getVersionCode(){
+
+		PackageInfo packageInfo = null;
+
+		int temporaryVersion = 0;
+		try {
+			if (context != null){
+				packageInfo = context.getPackageManager().getPackageInfo(packageName, 0);
+				temporaryVersion = packageInfo.versionCode;
+			}
+		} catch (PackageManager.NameNotFoundException e) {
+			Log_e(TAG, e.getMessage());
+		}
+
+		return temporaryVersion;
+	}
+
+	/*
+		Checks if there is already downloaded file.
+		If there is, checks if it's greater version than the current version.
+		If not, then delete and remove traces of it.
+		OUTPUT:
+		true = old file was deleted or there were no files.
+		false = an update is available.
+	 */
+	private boolean checkDownloadedFiles(){
+		boolean downloadedRemoved = true;
+
+		String update_file = preferences.getString(UPDATE_FILE, "");
+		if (update_file.length() > 0) {
+			// Check update version, delete if lesser version than current.
+			int currentVersion = getVersionCode();
+			int fileVersion = preferences.getInt(VERSION_KEY, 0);
+			if (fileVersion > currentVersion
+					&& fileVersion >= versionCode){
+				// Downloaded update is newer version.
+				// TODO Notify installation
+				raise_notification();
+				downloadedRemoved = false;
+			}
+			else{
+				// Remove the downloaded file.
+				if (!deleteFile(context.getExternalFilesDir(Environment.DIRECTORY_DOWNLOADS)
+						.getAbsolutePath() + update_file)){
+					// Deletion was not successful.
+				}
+
+				preferences.edit().putString(UPDATE_FILE, "").apply();
+				preferences.edit().putInt(VERSION_KEY, currentVersion).apply();
+			}
+
+		}
+
+		return downloadedRemoved;
+	}
+
+	/*
+		Deletes the file in the given uri.
+		Returns true if deletion succeeded, otherwise false.
+	 */
+	private boolean deleteFile(String fileUri){
+
+		try {
+			if (fileUri.substring(0,7).matches("file://")){
+				fileUri = fileUri.substring(7);
+			}
+
+			File temp = new File(fileUri);
+			if (temp.exists()){
+				Log_i(TAG,"File deletion successful.\n" + fileUri);
+				return temp.delete();
+			}
+
+			else{
+				Log_e(TAG,"File deletion failed, not found.\n" + fileUri);
+				return false;
+			}
+
+
+		} catch (Exception e) {
+			Log_e(TAG, e.getMessage());
+		}
+
 		return false;
 	}
 
@@ -742,6 +831,7 @@ public class AutoUpdateApk extends Observable {
 		checksum.update(bytes, 0, bytes.length);
 		return (int) checksum.getValue();
 	}
+
 
 	// logging facilities to enable easy overriding. thanks, Dan!
 	//
@@ -817,5 +907,6 @@ public class AutoUpdateApk extends Observable {
 				android.util.Log.e(tag, message, e);
 		}
 	}
+
 
 }

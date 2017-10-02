@@ -244,6 +244,9 @@ public class UpdateManager {
                     case DownloadManager.ERROR_UNKNOWN:
                         reasonText = "ERROR_UNKNOWN";
                         break;
+                    case 404:
+                        reasonText = "ERROR_404";
+                        break;
                 }
                 break;
             case DownloadManager.STATUS_PAUSED:
