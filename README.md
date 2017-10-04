@@ -8,6 +8,15 @@ This project allows to automatically update a running APK application using a pr
 __Origin__  
 Fork of [lenik.terenin](https://code.google.com/u/lenik.terenin/)'s auto-update client https://code.google.com/p/auto-update-apk-client/ for server agnostic usage.
 
+## TO DO
+
+ * Ask user confirmation for downloading
+ * Inform user if download failed on manual check
+ * Switch handler for Alarm Manager
+ * Declare this as a service and define global broadcast receiver and also support for Oreo (API 26).
+ * Volley timeout error with mobile network (needs to be increased in BasicNetwork.java)
+ * Possible downloading errors with DownloadManager (switch to Volley to handle downloads?)
+
 ## HOW TO
 
 #### Requirements
