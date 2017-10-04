@@ -601,60 +601,66 @@ public class AutoUpdateApk extends Observable {
 			setChanged();
 			notifyObservers(AUTOUPDATE_HAVE_UPDATE);
 
-			// Raise a notification installation notification
 
-			// Create the intent to open the APK file.
-			Intent notificationIntent;
-			PendingIntent contentIntent;
-			// Nougat (API 24=<), use File Provider method.
-			if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.N){
-				notificationIntent = new Intent(Intent.ACTION_INSTALL_PACKAGE);
+			File tempFile = context.getExternalFilesDir(Environment.DIRECTORY_DOWNLOADS);
+			if (tempFile != null){
+				// Raise a notification installation notification
 
-				String temp = context.getExternalFilesDir(Environment.DIRECTORY_DOWNLOADS)
-						.getAbsolutePath() + "/" + update_file;
-				if (temp.substring(0,7).matches("file://")){
-					temp = temp.substring(7);
+				// Create the intent to open the APK file.
+				Intent notificationIntent;
+				PendingIntent contentIntent;
+				// Nougat (API 24=<), use File Provider method.
+				if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.N){
+					notificationIntent = new Intent(Intent.ACTION_INSTALL_PACKAGE);
+
+
+
+					String temp = tempFile.getAbsolutePath() + "/" + update_file;
+					if (temp.substring(0,7).matches("file://")){
+						temp = temp.substring(7);
+					}
+
+					File installationFile = new File(temp);
+
+
+					Uri fileUri = FileProvider.getUriForFile(context, com.autoupdatetest.BuildConfig.APPLICATION_ID
+							+ ".provider", installationFile);
+
+					notificationIntent = notificationIntent.setData(fileUri);
+
+					notificationIntent.addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION);
+				}
+				// Otherwise use old file:// path method to open the APK file.
+				else{
+					notificationIntent = new Intent(Intent.ACTION_VIEW);
+					notificationIntent.setDataAndType(
+							Uri.parse("file://"
+									+ tempFile.getAbsolutePath() + "/"
+									+ update_file), ANDROID_PACKAGE);
+
 				}
 
-				File installationFile = new File(temp);
+				contentIntent = PendingIntent.getActivity(context, 0,
+						notificationIntent, PendingIntent.FLAG_UPDATE_CURRENT);
+
+				//Notification.Builder builder = new Notification.Builder(context);
+				NotificationCompat.Builder builder = new NotificationCompat.Builder(context);
 
 
-				Uri fileUri = FileProvider.getUriForFile(context, com.autoupdatetest.BuildConfig.APPLICATION_ID
-						+ ".provider", installationFile);
+				builder.setAutoCancel(false);
+				builder.setTicker(appName + " " + context.getString(R.string.txt_notif_updateAvailable));
+				builder.setContentTitle(appName +  " " + context.getString(R.string.txt_notif_update));
+				builder.setContentText(appName +  " " + context.getString(R.string.txt_notif_updateAvailable));
+				builder.setSmallIcon(appIcon);
+				builder.setContentIntent(contentIntent);
+				builder.setOngoing(true);
+				builder.setSubText(context.getString(R.string.txt_notif_clickHereToInstall));   //API level 16
+				builder.setWhen(System.currentTimeMillis());
 
-				notificationIntent = notificationIntent.setData(fileUri);
-
-				notificationIntent.addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION);
+				nm.notify(NOTIFICATION_ID, builder.build());
 			}
-			// Otherwise use old file:// path method to open the APK file.
-			else{
-				notificationIntent = new Intent(Intent.ACTION_VIEW);
-				notificationIntent.setDataAndType(
-						Uri.parse("file://"
-								+ context.getExternalFilesDir(Environment.DIRECTORY_DOWNLOADS)
-								.getAbsolutePath() + "/"
-								+ update_file), ANDROID_PACKAGE);
-
-			}
-
-			contentIntent = PendingIntent.getActivity(context, 0,
-					notificationIntent, PendingIntent.FLAG_UPDATE_CURRENT);
-
-			//Notification.Builder builder = new Notification.Builder(context);
-			NotificationCompat.Builder builder = new NotificationCompat.Builder(context);
 
 
-			builder.setAutoCancel(false);
-			builder.setTicker(appName + " " + context.getString(R.string.txt_notif_updateAvailable));
-			builder.setContentTitle(appName +  " " + context.getString(R.string.txt_notif_update));
-			builder.setContentText(appName +  " " + context.getString(R.string.txt_notif_updateAvailable));
-			builder.setSmallIcon(appIcon);
-			builder.setContentIntent(contentIntent);
-			builder.setOngoing(true);
-			builder.setSubText(context.getString(R.string.txt_notif_clickHereToInstall));   //API level 16
-			builder.setWhen(System.currentTimeMillis());
-
-			nm.notify(NOTIFICATION_ID, builder.build());
 		} else {
 			nm.cancel(NOTIFICATION_ID);
 		}
